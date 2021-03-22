@@ -2,7 +2,6 @@ import os
 import unicodedata
 from twilio.rest import Client
 import requests
-import datetime as dt
 
 STOCK_NAME = "TSLA"
 COMPANY_NAME = "Tesla Inc"
@@ -18,6 +17,12 @@ TO_NUMBER = os.getenv("TO_NUMBER")
 
 
 def get_last_two_closes(symbol):
+    """
+    Gets the closing prices of the requested stock for the previous two trading days using the alphavantage api.
+
+    :param symbol: The stock symbol of the desired stock (ie: TSLA)
+    :return: Returns a pair of tuples in the format ((last trading day date, closing value), (previous day date, value))
+    """
     parameters = {"function": "TIME_SERIES_DAILY", "symbol": symbol, "apikey": STOCK_API_KEY}
     response = requests.get(STOCK_ENDPOINT, params=parameters)
     data = response.json()["Time Series (Daily)"]
@@ -29,6 +34,14 @@ def get_last_two_closes(symbol):
 
 
 def get_news(company_name, from_date, to_date):
+    """
+    Returns the top 3 most popular news articles about the requested company name between the provided dates
+    using the newsapi.org API
+    :param company_name: The name of the company to search for.
+    :param from_date: Starting Search Date (yyyy-mm-dd format)
+    :param to_date: End Search Date (yyyy-mm-dd format)
+    :return: Returns a list of tuples containing the title and description of each article
+    """
     parameters = {'q': company_name, 'from': from_date, 'to': to_date, 'sortBy': 'popularity', 'apiKey': NEWS_API_KEY}
     response = requests.get(NEWS_ENDPOINT, params=parameters)
     data = response.json()
@@ -41,11 +54,18 @@ def get_news(company_name, from_date, to_date):
 
 
 def send_sms(message, from_number, to_number):
+    """
+    Send an sms message using the Twilio api
+    :param message: The message to send.
+    :param from_number: The Twilio phone number to send from.
+    :param to_number: The number to send the message to
+    :return: None
+    """
     account_sid = TWILIO_SID
     auth_token = TWILIO_KEY
     client = Client(account_sid, auth_token)
     sms_text = client.messages.create(body=message, from_=from_number, to=to_number)
-    print(sms_text.status)
+    print(f"SMS Message: {sms_text.status}")
 
 
 close_prices = get_last_two_closes(STOCK_NAME)
@@ -57,26 +77,10 @@ print(f"Last Close: {last_close[1]}")
 print(f"Previous Close: {prev_close[1]}")
 print(f"Difference: {price_diff:0.2f}, Percent Change: {percent_change:0.2f}%")
 
+# If the stock price changed more than 5%, send a message with the change and the top three news items for that symbol
 if percent_change >= 5:
-    print('Get News')
-
-print(get_news(COMPANY_NAME, from_date=last_close[1], to_date=last_close[0]))
-
-for article in get_news(COMPANY_NAME, from_date=last_close[1], to_date=last_close[0]):
-    next_message = f"{STOCK_NAME}: {'🔺' if price_diff > 0 else '🔻'}{percent_change:0.2f}\n" \
-                   f"Headline: {article[0]}\n" \
-                   f"Brief: {article[1]}"
-    send_sms(message=next_message, from_number=FROM_NUMBER, to_number=TO_NUMBER)
-
-
-
-# Optional TODO: Format the message like this:
-"""
-TSLA: 🔺2%
-Headline: Were Hedge Funds Right About Piling Into Tesla Inc. (TSLA)?. 
-Brief: We at Insider Monkey have gone over 821 13F filings that hedge funds and prominent investors are required to file by the SEC The 13F filings show the funds' and investors' portfolio positions as of March 31st, near the height of the coronavirus market crash.
-or
-"TSLA: 🔻5%
-Headline: Were Hedge Funds Right About Piling Into Tesla Inc. (TSLA)?. 
-Brief: We at Insider Monkey have gone over 821 13F filings that hedge funds and prominent investors are required to file by the SEC The 13F filings show the funds' and investors' portfolio positions as of March 31st, near the height of the coronavirus market crash.
-"""
+    for article in get_news(COMPANY_NAME, from_date=last_close[1], to_date=last_close[0]):
+        next_message = f"{STOCK_NAME}: {'🔺' if price_diff > 0 else '🔻'}{percent_change:0.2f}\n" \
+                       f"Headline: {article[0]}\n" \
+                       f"Brief: {article[1]}"
+        send_sms(message=next_message, from_number=FROM_NUMBER, to_number=TO_NUMBER)
